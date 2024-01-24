@@ -325,7 +325,7 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
         
         if captureModeControl.selectedSegmentIndex == CaptureMode.photo.rawValue {
             recordButton.isEnabled = false
-            HDRVideoModeButton.isHidden = true
+//            HDRVideoModeButton.isHidden = true
             selectedMovieMode10BitDeviceFormat = nil
             
             sessionQueue.async {
@@ -333,8 +333,9 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
                 // it doesn't support capture of Live Photos.
                 self.session.beginConfiguration()
                 self.session.removeOutput(self.movieFileOutput!)
+                self.session.removeOutput(self.videoDataOutput!)
                 self.session.sessionPreset = .photo
-                print("toggleCaptureMode: movieFileOut is removed and preset set as photo")
+                print("toggleCaptureMode: movieFileOut & videoDataOutput is removed and preset set as photo")
                 
                 DispatchQueue.main.async {
                     captureModeControl.isEnabled = true
@@ -367,52 +368,56 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
                 
                 let queue = DispatchQueue(label: "Sample Buffer Delegate")
                 
-                if self.session.canAddOutput(movieFileOutput) {
-//                    print("toggleCaptureMode: Can add movieFileOutput")
+                if self.session.canAddOutput(videoDataOutput) {
                     self.session.beginConfiguration()
-                    self.session.addOutput(movieFileOutput)
-                    self.session.sessionPreset = .high
-                    print("Check Session Output: \(self.session.outputs)")
-                    
-                    if self.session.canAddOutput(videoDataOutput) {
-                        print("toggleCaptureMode: Can add videoDataOutput")
-                        videoDataOutput.setSampleBufferDelegate(self, queue: queue)
-                        self.session.addOutput(videoDataOutput)
-                    }
-                    print("toggleCaptureMode - Check Session Output: \(self.session.outputs)")
-                    
-                    // Select Input Device and setting the inputDevice
-                    self.selectedMovieMode10BitDeviceFormat = self.tenBitVariantOfFormat(activeFormat: self.videoDeviceInput.device.activeFormat)
-                    
-                    if self.selectedMovieMode10BitDeviceFormat != nil {
-                        DispatchQueue.main.async {
-                            self.HDRVideoModeButton.isHidden = false
-                            self.HDRVideoModeButton.isEnabled = true
-                        }
-                        
-                        if self.HDRVideoMode == .on {
-                            do {
-                                try self.videoDeviceInput.device.lockForConfiguration()
-                                self.videoDeviceInput.device.activeFormat = self.selectedMovieMode10BitDeviceFormat!
-                                print("Setting 'x420' format \(String(describing: self.selectedMovieMode10BitDeviceFormat)) for video recording \n")
-                                self.videoDeviceInput.device.unlockForConfiguration()
-                            } catch {
-                                print("Could not lock device for configuration: \(error)")
-                            }
-                        }
-                    }
-                    
-                    // Modifying movieFileOutput -> VideoDataOutput
-//                    if let connection = movieFileOutput.connection(with: .video) {
+                    print("toggleCaptureMode: Can add videoDataOutput")
+                    videoDataOutput.setSampleBufferDelegate(self, queue: queue)
+                    videoDataOutput.videoSettings = nil
+                    self.session.addOutput(videoDataOutput)
                     if let connection = videoDataOutput.connection(with: .video) {
                         if connection.isVideoStabilizationSupported {
                             connection.preferredVideoStabilizationMode = .auto
                         }
                     }
+                    print("toggleCaptureMode: available pixelFormat: \(videoDataOutput)")
                     self.session.commitConfiguration()
+                    print("Check Session Output: \(self.session.outputs)")
+                }
+                
+                if self.session.canAddOutput(movieFileOutput) {
+//                    print("toggleCaptureMode: Can add movieFileOutput")
+                    self.session.addOutput(movieFileOutput)
+                    self.session.sessionPreset = .high
+                    
+//                    print("toggleCaptureMode - Check Session Output: \(self.session.outputs)")
+                    
+                    // Select Input Device and setting the inputDevice
+//                    self.selectedMovieMode10BitDeviceFormat = self.tenBitVariantOfFormat(activeFormat: self.videoDeviceInput.device.activeFormat)
+//                    
+//                    if self.selectedMovieMode10BitDeviceFormat != nil {
+//                        DispatchQueue.main.async {
+//                            self.HDRVideoModeButton.isHidden = false
+//                            self.HDRVideoModeButton.isEnabled = true
+//                        }
+//                        
+//                        if self.HDRVideoMode == .on {
+//                            do {
+//                                try self.videoDeviceInput.device.lockForConfiguration()
+//                                self.videoDeviceInput.device.activeFormat = self.selectedMovieMode10BitDeviceFormat!
+//                                print("Setting 'x420' format \(String(describing: self.selectedMovieMode10BitDeviceFormat)) for video recording \n")
+//                                self.videoDeviceInput.device.unlockForConfiguration()
+//                            } catch {
+//                                print("Could not lock device for configuration: \(error)")
+//                            }
+//                        }
+//                    }
+                    
+                    // Modifying movieFileOutput -> VideoDataOutput
+//                    if let connection = movieFileOutput.connection(with: .video) {
+//                    self.session.commitConfiguration()
                     print("toggleCaptureMode: Successfully configured")
 //                    print("L408 - toggleCaptureMode: Final Config \n Input: \(self.session.inputs) \n Outputs: \(self.session.outputs)")
-                    print("toggleCaptureMode: isAVCaptureVideoDataOutputIncluded? == \(String(describing: self.session.outputs).contains("AVCaptureVideoDataOutput"))")
+//                    print("toggleCaptureMode: isAVCaptureVideoDataOutputIncluded? == \(String(describing: self.session.outputs).contains("AVCaptureVideoDataOutput"))")
                     
                     DispatchQueue.main.async {
                         captureModeControl.isEnabled = true
@@ -421,7 +426,7 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
                     self.movieFileOutput = movieFileOutput
                     self.videoDataOutput = videoDataOutput
                     print("toggleCaptureMode: movieFileOutput = \(String(describing: self.movieFileOutput)); videoDataOutput = \(String(describing: self.videoDataOutput))")
-                    
+                    print("Check Session Output: \(self.session.outputs)")
                     
                     DispatchQueue.main.async {
                         self.recordButton.isEnabled = true
@@ -482,7 +487,8 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
             
             DispatchQueue.main.async {
                 self.cameraButton.isEnabled = true
-                self.recordButton.isEnabled = self.movieFileOutput != nil
+//                self.recordButton.isEnabled = self.movieFileOutput != nil
+                self.recordButton.isEnabled = self.videoDataOutput != nil
                 self.photoButton.isEnabled = true
                 self.livePhotoModeButton.isEnabled = true
                 self.captureModeControl.isEnabled = true
@@ -553,32 +559,32 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
                     } else {
                         self.session.addInput(self.videoDeviceInput)
                     }
-                    if let connection = self.movieFileOutput?.connection(with: .video) {
-                        self.session.sessionPreset = .high
-                        
-                        self.selectedMovieMode10BitDeviceFormat = self.tenBitVariantOfFormat(activeFormat: self.videoDeviceInput.device.activeFormat)
-                        
-                        if self.selectedMovieMode10BitDeviceFormat != nil {
-                            DispatchQueue.main.async {
-                                self.HDRVideoModeButton.isEnabled = true
-                            }
+//                    if let connection = self.movieFileOutput?.connection(with: .video) {
+//                        self.session.sessionPreset = .high
+//                        
+//                        self.selectedMovieMode10BitDeviceFormat = self.tenBitVariantOfFormat(activeFormat: self.videoDeviceInput.device.activeFormat)
+//                        
+//                        if self.selectedMovieMode10BitDeviceFormat != nil {
+//                            DispatchQueue.main.async {
+//                                self.HDRVideoModeButton.isEnabled = true
+//                            }
                             
-                            if self.HDRVideoMode == .on {
-                                do {
-                                    try self.videoDeviceInput.device.lockForConfiguration()
-                                    self.videoDeviceInput.device.activeFormat = self.selectedMovieMode10BitDeviceFormat!
-                                    print("Setting 'x420' format \(String(describing: self.selectedMovieMode10BitDeviceFormat)) for video recording")
-                                    self.videoDeviceInput.device.unlockForConfiguration()
-                                } catch {
-                                    print("Could not lock device for configuration: \(error)")
-                                }
-                            }
-                        }
-                        
-                        if connection.isVideoStabilizationSupported {
-                            connection.preferredVideoStabilizationMode = .auto
-                        }
-                    }
+//                            if self.HDRVideoMode == .on {
+//                                do {
+//                                    try self.videoDeviceInput.device.lockForConfiguration()
+//                                    self.videoDeviceInput.device.activeFormat = self.selectedMovieMode10BitDeviceFormat!
+//                                    print("Setting 'x420' format \(String(describing: self.selectedMovieMode10BitDeviceFormat)) for video recording")
+//                                    self.videoDeviceInput.device.unlockForConfiguration()
+//                                } catch {
+//                                    print("Could not lock device for configuration: \(error)")
+//                                }
+//                            }
+//                        }
+//                        
+//                        if connection.isVideoStabilizationSupported {
+//                            connection.preferredVideoStabilizationMode = .auto
+//                        }
+//                    }
                     
                     // `livePhotoCaptureEnabled` and other properties of
                     // the`AVCapturePhotoOutput` are `NO` when a video device
@@ -970,7 +976,6 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
             
 //            var videoSampleBuffer : AVCaptureVideoDataOutputSampleBufferDelegate
 //            videoSampleBuffer.captureOutput?(videoDataOutput, didOutput: <#T##CMSampleBuffer#>, from: <#T##AVCaptureConnection#>)
-            
             if !movieFileOutput.isRecording {
                 print("toggleMovieRecording - movieFileOutput.isRecording? == \(String(describing: self.movieFileOutput?.isRecording))")
                 if UIDevice.current.isMultitaskingSupported {
@@ -1105,16 +1110,21 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
         return image
     }
     
+//    var didOutputNewImage: (UIImage) -> Void
+    
     // same function from AVCaptureVideoDataOutputSampleBufferDelegate
-    func captureOutput(_ captureOutput: AVCaptureOutput!,
-                         didOutputSampleBuffer sampleBuffer: CMSampleBuffer!,
-                         from connection: AVCaptureConnection!) {
+    func captureOutput(_ captureOutput: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        print("===== \nFrame Received!\n=====")
         let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)!
         let ciimage = CIImage(cvPixelBuffer: imageBuffer)
         let image = self.convert(cmage: ciimage)
+        // TODO: extract red channel -> average across each frame -> save to list/array
         print("CIImage: \(ciimage)")
         print("UIImage: \(image)")
-        
+    }
+    
+    func captureOutput(_ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        print("===== \nFrame dropped!!\n=====")
     }
     
     // MARK: KVO and Notifications
@@ -1130,7 +1140,7 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
                 // Only enable the ability to change camera if the device has
                 // more than one camera.
                 self.cameraButton.isEnabled = isSessionRunning && self.videoDeviceDiscoverySession.uniqueDevicePositionsCount > 1
-                self.recordButton.isEnabled = isSessionRunning && self.movieFileOutput != nil
+                self.recordButton.isEnabled = isSessionRunning && self.movieFileOutput != nil && self.videoDataOutput != nil
                 self.photoButton.isEnabled = isSessionRunning
                 self.captureModeControl.isEnabled = isSessionRunning
                 self.livePhotoModeButton.isEnabled = isSessionRunning && isLivePhotoCaptureEnabled
@@ -1181,9 +1191,9 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
             guard let systemPreferredCamera = change?[.newKey] as? AVCaptureDevice else { return }
             
             // Don't switch cameras if movie recording is in progress.
-            if let movieFileOutput = self.movieFileOutput, movieFileOutput.isRecording {
-                return
-            }
+//            if let movieFileOutput = self.movieFileOutput, movieFileOutput.isRecording {
+//                return
+//            }
             if self.videoDeviceInput.device == systemPreferredCamera {
                 return
             }
