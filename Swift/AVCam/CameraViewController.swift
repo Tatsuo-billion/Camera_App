@@ -10,9 +10,9 @@ import AVFoundation
 import CoreLocation
 import Photos
 
-class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelegate, AVCapturePhotoOutputReadinessCoordinatorDelegate {
-	
-	let locationManager = CLLocationManager()
+class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelegate, AVCapturePhotoOutputReadinessCoordinatorDelegate, AVCaptureVideoDataOutputSampleBufferDelegate {
+    
+    let locationManager = CLLocationManager()
     
     // MARK: View Controller Life Cycle
     
@@ -31,13 +31,14 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
         
         // Set up the video preview view.
         previewView.session = session
-		
-		// Request location authorization so photos and videos can be tagged
+        print("ViewDidLoad: session set")
+        
+        // Request location authorization so photos and videos can be tagged
         // with their location.
-		if locationManager.authorizationStatus == .notDetermined {
-			locationManager.requestWhenInUseAuthorization()
-		}
-		
+        if locationManager.authorizationStatus == .notDetermined {
+            locationManager.requestWhenInUseAuthorization()
+        }
+        
         // Check the video authorization status. Video access is required and
         // audio access is optional. If the user denies audio access, AVCam
         // won't record audio during movie recording.
@@ -79,6 +80,7 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
          that the main queue isn't blocked, which keeps the UI responsive.
          */
         sessionQueue.async {
+            print("viewDidLoad: Start Configuring session.")
             self.configureSession()
         }
     }
@@ -188,7 +190,7 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
         
         // Add video input.
         do {
-			// Handle the situation when the system-preferred camera is nil.
+            // Handle the situation when the system-preferred camera is nil.
             var defaultVideoDevice: AVCaptureDevice? = AVCaptureDevice.systemPreferredCamera
             
             let userDefaults = UserDefaults.standard
@@ -215,6 +217,7 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
             if session.canAddInput(videoDeviceInput) {
                 session.addInput(videoDeviceInput)
                 self.videoDeviceInput = videoDeviceInput
+                print("configureSession: videoDeviceInput set")
                 
                 DispatchQueue.main.async {
                     // Dispatch video streaming to the main queue because
@@ -246,6 +249,7 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
             
             if session.canAddInput(audioDeviceInput) {
                 session.addInput(audioDeviceInput)
+                print("configureSession: audioDeviceInput set")
             } else {
                 print("Could not add audio device input to the session")
             }
@@ -256,6 +260,7 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
         // Add the photo output.
         if session.canAddOutput(photoOutput) {
             session.addOutput(photoOutput)
+            print("configureSession: photoOutput set")
             
             photoOutput.isLivePhotoCaptureEnabled = photoOutput.isLivePhotoCaptureSupported
             photoOutput.maxPhotoQualityPrioritization = .quality
@@ -301,6 +306,7 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
             } else {
                 DispatchQueue.main.async {
                     self.resumeButton.isHidden = true
+                    print("resumeInterruptedSession: resumeButton.isHidden is true")
                 }
             }
         }
@@ -328,6 +334,7 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
                 self.session.beginConfiguration()
                 self.session.removeOutput(self.movieFileOutput!)
                 self.session.sessionPreset = .photo
+                print("toggleCaptureMode: movieFileOut is removed and preset set as photo")
                 
                 DispatchQueue.main.async {
                     captureModeControl.isEnabled = true
@@ -341,6 +348,7 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
                 DispatchQueue.main.async {
                     self.livePhotoModeButton.isHidden = false
                     self.livePhotoModeButton.isEnabled = livePhotoCaptureEnabled
+                    print("toggleCaptureMode: livePhotoButton is enabled")
                     self.photoQualityPrioritizationSegControl.isHidden = false
                     self.photoQualityPrioritizationSegControl.isEnabled = true
                 }
@@ -351,13 +359,29 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
             photoQualityPrioritizationSegControl.isHidden = true
             
             sessionQueue.async {
+                
+                // MARK: VideoDataOutput Integration
+                
+                let videoDataOutput = AVCaptureVideoDataOutput()
                 let movieFileOutput = AVCaptureMovieFileOutput()
                 
+                let queue = DispatchQueue(label: "Sample Buffer Delegate")
+                
                 if self.session.canAddOutput(movieFileOutput) {
+//                    print("toggleCaptureMode: Can add movieFileOutput")
                     self.session.beginConfiguration()
                     self.session.addOutput(movieFileOutput)
                     self.session.sessionPreset = .high
+                    print("Check Session Output: \(self.session.outputs)")
                     
+                    if self.session.canAddOutput(videoDataOutput) {
+                        print("toggleCaptureMode: Can add videoDataOutput")
+                        videoDataOutput.setSampleBufferDelegate(self, queue: queue)
+                        self.session.addOutput(videoDataOutput)
+                    }
+                    print("toggleCaptureMode - Check Session Output: \(self.session.outputs)")
+                    
+                    // Select Input Device and setting the inputDevice
                     self.selectedMovieMode10BitDeviceFormat = self.tenBitVariantOfFormat(activeFormat: self.videoDeviceInput.device.activeFormat)
                     
                     if self.selectedMovieMode10BitDeviceFormat != nil {
@@ -370,7 +394,7 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
                             do {
                                 try self.videoDeviceInput.device.lockForConfiguration()
                                 self.videoDeviceInput.device.activeFormat = self.selectedMovieMode10BitDeviceFormat!
-                                print("Setting 'x420' format \(String(describing: self.selectedMovieMode10BitDeviceFormat)) for video recording")
+                                print("Setting 'x420' format \(String(describing: self.selectedMovieMode10BitDeviceFormat)) for video recording \n")
                                 self.videoDeviceInput.device.unlockForConfiguration()
                             } catch {
                                 print("Could not lock device for configuration: \(error)")
@@ -378,18 +402,26 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
                         }
                     }
                     
-                    if let connection = movieFileOutput.connection(with: .video) {
+                    // Modifying movieFileOutput -> VideoDataOutput
+//                    if let connection = movieFileOutput.connection(with: .video) {
+                    if let connection = videoDataOutput.connection(with: .video) {
                         if connection.isVideoStabilizationSupported {
                             connection.preferredVideoStabilizationMode = .auto
                         }
                     }
                     self.session.commitConfiguration()
+                    print("toggleCaptureMode: Successfully configured")
+//                    print("L408 - toggleCaptureMode: Final Config \n Input: \(self.session.inputs) \n Outputs: \(self.session.outputs)")
+                    print("toggleCaptureMode: isAVCaptureVideoDataOutputIncluded? == \(String(describing: self.session.outputs).contains("AVCaptureVideoDataOutput"))")
                     
                     DispatchQueue.main.async {
                         captureModeControl.isEnabled = true
                     }
                     
                     self.movieFileOutput = movieFileOutput
+                    self.videoDataOutput = videoDataOutput
+                    print("toggleCaptureMode: movieFileOutput = \(String(describing: self.movieFileOutput)); videoDataOutput = \(String(describing: self.videoDataOutput))")
+                    
                     
                     DispatchQueue.main.async {
                         self.recordButton.isEnabled = true
@@ -560,8 +592,8 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
                     print("Error occurred while creating video device input: \(error)")
                 }
             }
-			
-			completion?()
+            
+            completion?()
         }
     }
     
@@ -671,6 +703,7 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
                     UIView.animate(withDuration: 0.25) {
                         self.previewView.videoPreviewLayer.opacity = 1
                     }
+                    print("L689 - capturePhoto: Screen flashed!!")
                 }
             }, livePhotoCaptureHandler: { capturing in
                 self.sessionQueue.async {
@@ -698,9 +731,9 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
                     self.inProgressPhotoCaptureDelegates[photoCaptureProcessor.requestedPhotoSettings.uniqueID] = nil
                 }
             })
-			
-			// Specify the location the photo was taken
-			photoCaptureProcessor.location = self.locationManager.location
+            
+            // Specify the location the photo was taken
+            photoCaptureProcessor.location = self.locationManager.location
             
             // The photo output holds a weak reference to the photo capture
             // delegate and stores it in an array to maintain a strong
@@ -768,8 +801,10 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
             
             DispatchQueue.main.async {
                 if livePhotoMode == .on {
+                    print("LivePhotoON")
                     self.livePhotoModeButton.setImage(#imageLiteral(resourceName: "LivePhotoON"), for: [])
                 } else {
+                    print("LivePhotoOff")
                     self.livePhotoModeButton.setImage(#imageLiteral(resourceName: "LivePhotoOFF"), for: [])
                 }
                 self.photoSettings = photoSettings
@@ -881,9 +916,12 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
     
     @IBOutlet var capturingLivePhotoLabel: UILabel!
     
-    // MARK: Recording Movies
+    // MARK: Recording Movies For VideoDataOutput
     
     private var movieFileOutput: AVCaptureMovieFileOutput?
+    
+    // initialization without ? means it doesn't allow nil type but now I am allowing it
+    private var videoDataOutput: AVCaptureVideoDataOutput?
     
     private var backgroundRecordingID: UIBackgroundTaskIdentifier?
     
@@ -896,6 +934,10 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
             return
         }
         
+        guard let videoDataOutput = self.videoDataOutput else {
+            print("toggleMovieRecording: videoDataOutput initialized to \(String(describing: self.videoDataOutput))")
+            return
+        }
         /*
          Disable the Camera button until recording finishes, and disable
          the Record button until recording starts or finishes.
@@ -905,6 +947,7 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
         cameraButton.isEnabled = false
         recordButton.isEnabled = false
         captureModeControl.isEnabled = false
+        print("toggleMovieRecording: camera, record, captureModeControl all disabled!")
         
         let videoRotationAngle = self.videoDeviceRotationCoordinator.videoRotationAngleForHorizonLevelCapture
         
@@ -921,7 +964,15 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
         self.setNeedsUpdateOfSupportedInterfaceOrientations()
         
         sessionQueue.async {
+            print("toggleMovieRecording - videoSettings: \(String(describing: videoDataOutput.videoSettings))")
+            print("toggleMovieRecording - configureBufferDimensions \(String(describing: self.videoDataOutput?.automaticallyConfiguresOutputBufferDimensions))")
+            print("toggleMovieRecording - availablePixelFormatTypes \(String(describing: self.videoDataOutput?.availableVideoPixelFormatTypes))")
+            
+//            var videoSampleBuffer : AVCaptureVideoDataOutputSampleBufferDelegate
+//            videoSampleBuffer.captureOutput?(videoDataOutput, didOutput: <#T##CMSampleBuffer#>, from: <#T##AVCaptureConnection#>)
+            
             if !movieFileOutput.isRecording {
+                print("toggleMovieRecording - movieFileOutput.isRecording? == \(String(describing: self.movieFileOutput?.isRecording))")
                 if UIDevice.current.isMultitaskingSupported {
                     self.backgroundRecordingID = UIApplication.shared.beginBackgroundTask(expirationHandler: nil)
                 }
@@ -956,6 +1007,7 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
     /// - Tag: DidStartRecording
     func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
         // Enable the Record button to let the user stop recording.
+        print("Let User Stop Recording! \n")
         DispatchQueue.main.async {
             self.recordButton.isEnabled = true
             self.recordButton.setImage(#imageLiteral(resourceName: "CaptureStop"), for: [])
@@ -1005,9 +1057,9 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
                         options.shouldMoveFile = true
                         let creationRequest = PHAssetCreationRequest.forAsset()
                         creationRequest.addResource(with: .video, fileURL: outputFileURL, options: options)
-						
-						// Specify the movie's location.
-						creationRequest.location = self.locationManager.location
+                        
+                        // Specify the movie's location.
+                        creationRequest.location = self.locationManager.location
                     }, completionHandler: { success, error in
                         if !success {
                             print("AVCam couldn't save the movie to your photo library: \(String(describing: error))")
@@ -1044,6 +1096,25 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
             // After the recording finishes, allow rotation to continue.
             self.setNeedsUpdateOfSupportedInterfaceOrientations()
         }
+    }
+    
+    func convert(cmage: CIImage) -> UIImage {
+        let context = CIContext()
+        let cgImage = context.createCGImage(cmage, from: cmage.extent)!
+        let image = UIImage(cgImage: cgImage)
+        return image
+    }
+    
+    // same function from AVCaptureVideoDataOutputSampleBufferDelegate
+    func captureOutput(_ captureOutput: AVCaptureOutput!,
+                         didOutputSampleBuffer sampleBuffer: CMSampleBuffer!,
+                         from connection: AVCaptureConnection!) {
+        let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)!
+        let ciimage = CIImage(cvPixelBuffer: imageBuffer)
+        let image = self.convert(cmage: ciimage)
+        print("CIImage: \(ciimage)")
+        print("UIImage: \(image)")
+        
     }
     
     // MARK: KVO and Notifications
