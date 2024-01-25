@@ -1113,14 +1113,16 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
 //    var didOutputNewImage: (UIImage) -> Void
     var height : Double = 0
     var width : Double = 0
+    var total : UInt64 = 0
+    var redArr : [UInt64] = []
     // same function from AVCaptureVideoDataOutputSampleBufferDelegate
     func captureOutput(_ captureOutput: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        //        print("===== \nFrame Received!\n=====")
+        print("===== \nFrame Received!\n=====")
         let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)!
         let ciimage = CIImage(cvPixelBuffer: imageBuffer)
         let image = self.convert(cmage: ciimage)
-        print("CIImage: \(ciimage) => \(type(of: ciimage))")
-        print("UIImage: \(image) => \(type(of: image))")
+//        print("CIImage: \(ciimage) => \(type(of: ciimage))")
+//        print("UIImage: \(image) => \(type(of: image))")
         // TODO: extract red channel -> average across each frame -> save to list/array
         
         // Access underlying CGImage
@@ -1132,22 +1134,22 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
         
         assert(cgimage.colorSpace?.model == .rgb)
         
-        let bytesPerPixel = cgimage.bitsPerPixel / cgimage.bitsPerComponent
-        print("height: \(cgimage.height), width: \(cgimage.width)")
-        
-        for y in 0..<cgimage.height {
-            let x = cgimage.width / 2
-//            for x in 0..<cgimage.width {
-                let offset = (y * cgimage.bytesPerRow) + (x * bytesPerPixel)
-                let components = (r: bytes[offset], g: bytes[offset + 1], b: bytes[offset + 2])
-                print("[x:\(x), y:\(y)] \(components)")
-//            }
-            print("---")
+        DispatchQueue.global(qos: .utility).async {
+            let bytesPerPixel = cgimage.bitsPerPixel / cgimage.bitsPerComponent
+            self.total = 0
+            
+            // TODO: run this part in the background
+            for y in 0..<cgimage.height {
+                for x in 0..<cgimage.width {
+                    let offset = (y * cgimage.bytesPerRow) + (x * bytesPerPixel)
+                    let red = bytes[offset]
+                    self.total += UInt64(red)
+                }
+            }
+            let average = self.total / UInt64(cgimage.height * cgimage.width)
+            self.redArr.append(average)
+            print("=====\n\(String(average)), \(self.redArr)\n=====")
         }
-        
-        print(type(of: bytes))
-        print(type(of: data))
-        
     }
     
     func captureOutput(_ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
