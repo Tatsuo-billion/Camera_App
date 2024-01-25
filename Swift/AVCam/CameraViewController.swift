@@ -1111,16 +1111,43 @@ class CameraViewController: UIViewController, AVCaptureFileOutputRecordingDelega
     }
     
 //    var didOutputNewImage: (UIImage) -> Void
-    
+    var height : Double = 0
+    var width : Double = 0
     // same function from AVCaptureVideoDataOutputSampleBufferDelegate
     func captureOutput(_ captureOutput: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        print("===== \nFrame Received!\n=====")
+        //        print("===== \nFrame Received!\n=====")
         let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)!
         let ciimage = CIImage(cvPixelBuffer: imageBuffer)
         let image = self.convert(cmage: ciimage)
-        // TODO: extract red channel -> average across each frame -> save to list/array
-        print("CIImage: \(ciimage)")
-        print("UIImage: \(image)")
+        print("CIImage: \(ciimage) => \(type(of: ciimage))")
+        print("UIImage: \(image) => \(type(of: image))")
+        // TODO: extract red channel -> average across each frame -> save to list/array
+        
+        // Access underlying CGImage
+        guard let cgimage = image.cgImage,
+              let data = cgimage.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else {
+            fatalError("=====\ncouldn't access image data\n=====")
+        }
+        
+        assert(cgimage.colorSpace?.model == .rgb)
+        
+        let bytesPerPixel = cgimage.bitsPerPixel / cgimage.bitsPerComponent
+        print("height: \(cgimage.height), width: \(cgimage.width)")
+        
+        for y in 0..<cgimage.height {
+            let x = cgimage.width / 2
+//            for x in 0..<cgimage.width {
+                let offset = (y * cgimage.bytesPerRow) + (x * bytesPerPixel)
+                let components = (r: bytes[offset], g: bytes[offset + 1], b: bytes[offset + 2])
+                print("[x:\(x), y:\(y)] \(components)")
+//            }
+            print("---")
+        }
+        
+        print(type(of: bytes))
+        print(type(of: data))
+        
     }
     
     func captureOutput(_ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
